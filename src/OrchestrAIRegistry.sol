@@ -12,7 +12,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  */
 contract OrchestrAIRegistry is ReentrancyGuard, Pausable, Ownable {
     // ============ Custom Errors ============
-    
+
     error InvalidArrayLength();
     error InsufficientPayment();
     error InvalidJobStatus();
@@ -24,40 +24,41 @@ contract OrchestrAIRegistry is ReentrancyGuard, Pausable, Ownable {
     error InvalidInferenceProof();
 
     // ============ Type Definitions ============
-    
-    enum JobStatus { 
-        PENDING,    // Job created but not yet started
-        ONGOING,    // Job is currently being processed
-        COMPLETED,  // Job completed successfully
-        CANCELLED   // Job cancelled (refund may be required)
+
+    enum JobStatus {
+        PENDING, // Job created but not yet started
+        ONGOING, // Job is currently being processed
+        COMPLETED, // Job completed successfully
+        CANCELLED // Job cancelled (refund may be required)
+
     }
 
     struct Job {
-        address payable client;     // Address of the job creator
-        uint256 jobId;              // Unique identifier for the job
-        uint256 totalAmount;        // Total payment amount for the job
-        uint256 createdAt;          // Timestamp when job was created
-        uint256 completedAt;        // Timestamp when job was completed
-        address[] assignedAgents;   // Array of AI agent addresses assigned to this job
-        uint256[] agentPayments;    // Corresponding payment amounts for each agent
-        JobStatus status;           // Current status of the job
-        uint8 rating;               // Client rating (1-5 stars)
-        bool isRated;               // Whether the job has been rated
-        bytes32[] inferenceHashes;  // Array of hashes for each agent's zkTLS inference proof
-        bool[] inferenceVerified;   // Array tracking verification status for each inference
+        address payable client; // Address of the job creator
+        uint256 jobId; // Unique identifier for the job
+        uint256 totalAmount; // Total payment amount for the job
+        uint256 createdAt; // Timestamp when job was created
+        uint256 completedAt; // Timestamp when job was completed
+        address[] assignedAgents; // Array of AI agent addresses assigned to this job
+        uint256[] agentPayments; // Corresponding payment amounts for each agent
+        JobStatus status; // Current status of the job
+        uint8 rating; // Client rating (1-5 stars)
+        bool isRated; // Whether the job has been rated
+        bytes32[] inferenceHashes; // Array of hashes for each agent's zkTLS inference proof
+        bool[] inferenceVerified; // Array tracking verification status for each inference
     }
 
     struct Agent {
-        address payable owner;      // Address of the agent owner
-        string metadata;            // IPFS hash containing agent details/capabilities
-        uint256 totalEarned;        // Total amount earned by this agent
-        uint256 availableBalance;   // Current withdrawable balance
-        uint256 jobsCompleted;      // Number of jobs completed
-        bool isActive;              // Whether the agent is currently active
+        address payable owner; // Address of the agent owner
+        string metadata; // IPFS hash containing agent details/capabilities
+        uint256 totalEarned; // Total amount earned by this agent
+        uint256 availableBalance; // Current withdrawable balance
+        uint256 jobsCompleted; // Number of jobs completed
+        bool isActive; // Whether the agent is currently active
     }
 
     // ============ State Variables ============
-    
+
     /// @dev Counter for generating unique job IDs
     uint256 private nextJobId;
 
@@ -74,7 +75,7 @@ contract OrchestrAIRegistry is ReentrancyGuard, Pausable, Ownable {
     mapping(address => uint256[]) public agentJobs;
 
     // ============ Events ============
-    
+
     event AgentRegistered(address indexed agentAddress, address indexed owner, string metadata);
     event JobCreated(uint256 indexed jobId, address indexed client, uint256 totalAmount);
     event JobStarted(uint256 indexed jobId, address[] agents);
@@ -86,7 +87,7 @@ contract OrchestrAIRegistry is ReentrancyGuard, Pausable, Ownable {
     event InferenceVerified(uint256 indexed jobId, uint256 indexed agentIndex, bytes32 inferenceHash);
 
     // ============ Modifiers ============
-    
+
     modifier onlyAgentOwner(address agentAddress) {
         if (agents[agentAddress].owner != msg.sender) {
             revert UnauthorizedAccess();
@@ -119,14 +120,11 @@ contract OrchestrAIRegistry is ReentrancyGuard, Pausable, Ownable {
      * @param agentAddress The wallet address for the AI agent
      * @param metadata IPFS hash containing agent details
      */
-    function registerAgent(
-        address payable agentAddress, 
-        string calldata metadata
-    ) external whenNotPaused {
+    function registerAgent(address payable agentAddress, string calldata metadata) external whenNotPaused {
         if (agents[agentAddress].owner != address(0)) {
             revert("Agent already registered");
         }
-        
+
         agents[agentAddress] = Agent({
             owner: payable(msg.sender),
             metadata: metadata,
@@ -144,28 +142,30 @@ contract OrchestrAIRegistry is ReentrancyGuard, Pausable, Ownable {
      * @param assignedAgents Array of AI agent addresses to work on the job
      * @param agentPayments Array of payment amounts for each agent
      */
-    function createJob(
-        address[] calldata assignedAgents, 
-        uint256[] calldata agentPayments
-    ) external payable whenNotPaused nonReentrant {
+    function createJob(address[] calldata assignedAgents, uint256[] calldata agentPayments)
+        external
+        payable
+        whenNotPaused
+        nonReentrant
+    {
         if (assignedAgents.length != agentPayments.length || assignedAgents.length == 0) {
             revert InvalidArrayLength();
         }
-        
+
         uint256 totalPayments = 0;
         for (uint256 i = 0; i < agentPayments.length; i++) {
             totalPayments += agentPayments[i];
         }
-        
+
         if (msg.value < totalPayments) {
             revert InsufficientPayment();
         }
 
         uint256 jobId = nextJobId++;
-        
+
         bool[] memory initialVerification = new bool[](assignedAgents.length);
         bytes32[] memory initialHashes = new bytes32[](assignedAgents.length);
-        
+
         jobs[jobId] = Job({
             client: payable(msg.sender),
             jobId: jobId,
@@ -193,14 +193,12 @@ contract OrchestrAIRegistry is ReentrancyGuard, Pausable, Ownable {
      * @notice Start a pending job
      * @param jobId The ID of the job to start
      */
-    function startJob(
-        uint256 jobId
-    ) external whenNotPaused jobExists(jobId) {
+    function startJob(uint256 jobId) external whenNotPaused jobExists(jobId) {
         Job storage job = jobs[jobId];
         if (job.status != JobStatus.PENDING) {
             revert InvalidJobStatus();
         }
-        
+
         job.status = JobStatus.ONGOING;
         emit JobStarted(jobId, job.assignedAgents);
     }
@@ -211,11 +209,11 @@ contract OrchestrAIRegistry is ReentrancyGuard, Pausable, Ownable {
      * @param agentIndex Index of the agent in the job's assignedAgents array
      * @param inferenceHash Hash of the zkTLS inference proof
      */
-    function verifyAgentInference(
-        uint256 jobId,
-        uint256 agentIndex,
-        bytes32 inferenceHash
-    ) external whenNotPaused jobExists(jobId) {
+    function verifyAgentInference(uint256 jobId, uint256 agentIndex, bytes32 inferenceHash)
+        external
+        whenNotPaused
+        jobExists(jobId)
+    {
         Job storage job = jobs[jobId];
         if (job.status != JobStatus.ONGOING) {
             revert InvalidJobStatus();
@@ -253,9 +251,7 @@ contract OrchestrAIRegistry is ReentrancyGuard, Pausable, Ownable {
      * @notice Internal function to complete job and distribute payments
      * @param jobId The ID of the job to complete
      */
-    function _completeJobAndPay(
-        uint256 jobId
-    ) private {
+    function _completeJobAndPay(uint256 jobId) private {
         Job storage job = jobs[jobId];
         job.status = JobStatus.COMPLETED;
         job.completedAt = block.timestamp;
@@ -264,7 +260,7 @@ contract OrchestrAIRegistry is ReentrancyGuard, Pausable, Ownable {
         for (uint256 i = 0; i < job.assignedAgents.length; i++) {
             address agent = job.assignedAgents[i];
             uint256 payment = job.agentPayments[i];
-            
+
             agents[agent].availableBalance += payment;
             agents[agent].totalEarned += payment;
             agents[agent].jobsCompleted++;
@@ -278,21 +274,24 @@ contract OrchestrAIRegistry is ReentrancyGuard, Pausable, Ownable {
      * @notice Withdraw available balance for an agent
      * @param agentAddress The address of the agent to withdraw funds from
      */
-    function withdrawAgentBalance(
-        address payable agentAddress
-    ) external whenNotPaused nonReentrant onlyAgentOwner(agentAddress) {
+    function withdrawAgentBalance(address payable agentAddress)
+        external
+        whenNotPaused
+        nonReentrant
+        onlyAgentOwner(agentAddress)
+    {
         uint256 amount = agents[agentAddress].availableBalance;
         if (amount == 0) {
             revert NoBalanceAvailable();
         }
-        
+
         agents[agentAddress].availableBalance = 0;
-        
-        (bool success, ) = agentAddress.call{value: amount}("");
+
+        (bool success,) = agentAddress.call{value: amount}("");
         if (!success) {
             revert TransferFailed();
         }
-        
+
         emit AgentWithdrawal(agentAddress, amount);
     }
 
@@ -301,14 +300,11 @@ contract OrchestrAIRegistry is ReentrancyGuard, Pausable, Ownable {
      * @param jobId The ID of the job to rate
      * @param rating Rating from 1-5
      */
-    function rateJob(
-        uint256 jobId,
-        uint8 rating
-    ) external whenNotPaused jobExists(jobId) onlyJobClient(jobId) {
+    function rateJob(uint256 jobId, uint8 rating) external whenNotPaused jobExists(jobId) onlyJobClient(jobId) {
         if (rating < 1 || rating > 5) {
             revert InvalidRating();
         }
-        
+
         Job storage job = jobs[jobId];
         if (job.status != JobStatus.COMPLETED) {
             revert InvalidJobStatus();
@@ -325,27 +321,19 @@ contract OrchestrAIRegistry is ReentrancyGuard, Pausable, Ownable {
 
     // ============ View Functions ============
 
-    function getClientJobs(
-        address client
-    ) external view returns (uint256[] memory) {
+    function getClientJobs(address client) external view returns (uint256[] memory) {
         return clientJobs[client];
     }
 
-    function getAgentJobs(
-        address agentAddress
-    ) external view returns (uint256[] memory) {
+    function getAgentJobs(address agentAddress) external view returns (uint256[] memory) {
         return agentJobs[agentAddress];
     }
 
-    function getJobDetails(
-        uint256 jobId
-    ) external view returns (Job memory) {
+    function getJobDetails(uint256 jobId) external view returns (Job memory) {
         return jobs[jobId];
     }
 
-    function getAgentDetails(
-        address agentAddress
-    ) external view returns (Agent memory) {
+    function getAgentDetails(address agentAddress) external view returns (Agent memory) {
         return agents[agentAddress];
     }
 
@@ -355,9 +343,7 @@ contract OrchestrAIRegistry is ReentrancyGuard, Pausable, Ownable {
      * @notice Verify the zkTLS inference proof
      * @dev TODO: Implement zkTLS proof verification on Eigen Layer
      */
-    function verifyInference(
-        bytes32 inferenceHash
-    ) internal pure returns (bool) {
+    function verifyInference(bytes32 inferenceHash) internal pure returns (bool) {
         // TODO: Implement zkTLS proof verification on Eigen Layer
         return inferenceHash != bytes32(0);
     }
